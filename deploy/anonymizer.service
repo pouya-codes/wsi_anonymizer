@@ -1,0 +1,34 @@
+# /etc/systemd/system/anonymizer.service
+[Unit]
+Description=WSI Anonymizer web app (example unit, adjust user and paths)
+After=network.target
+
+[Service]
+Type=simple
+User=anonymizer
+Group=anonymizer
+WorkingDirectory=/opt/wsi_anonymizer
+# ANON_PASSWORD_HASH (admin) + ANON_SESSION_SECRET, written by `npm run set-password`.
+# Further passwords: ~/.config/anonymizer/accounts.json (`npm run accounts`).
+EnvironmentFile=/home/anonymizer/.config/anonymizer/anonymizer.env
+Environment=NODE_ENV=production HOST=127.0.0.1 PORT=8790
+ExecStart=/usr/bin/node server/server.mjs
+Restart=on-failure
+RestartSec=3
+
+# The server reads dist/ and appends to its usage log; lock everything else down.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+# Usage log (usage.jsonl). Must exist before start: mkdir -p ~/.local/share/anonymizer
+ReadWritePaths=/home/anonymizer/.local/share/anonymizer
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

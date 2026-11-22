@@ -1,0 +1,13 @@
+node_modules
+dist
+*.local
+.DS_Store
+*.log
+.env
+.env.*
+*.env
+!deploy/*.example
+# copied from node_modules by scripts/copy-ocr-assets.mjs
+public/ocr
+# command-line tool build output (bundle + programs)
+cli/dist

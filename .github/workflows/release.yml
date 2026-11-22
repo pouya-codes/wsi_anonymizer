@@ -1,0 +1,83 @@
+# Builds the stand-alone command-line programs for Windows, macOS and Linux.
+#
+# - Every push / pull request: build + smoke test (programs kept as workflow artifacts for 14 days).
+# - Pushing a tag like v1.0.1: also publishes a GitHub Release with the programs attached,
+#   so users can download them from the Releases page.
+name: Build programs
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - run: npm ci
+
+      - name: Type-check the shared code
+        run: npm run typecheck
+
+      - name: Compile programs (all platforms)
+        run: npm run build:cli-exe
+
+      - name: Smoke test (Linux program)
+        run: |
+          cli/dist/slide-anonymizer-linux --help
+          mkdir -p smoke/in && head -c 4096 /dev/urandom > smoke/in/broken.svs
+          set +e; cli/dist/slide-anonymizer-linux smoke/in smoke/out --yes; code=$?; set -e
+          # exit code 1 = "some slides failed", which is expected for a random file
+          test "$code" = 1 && test -f smoke/out/anonymization-failed.csv
+
+      # Browsers drop the "executable" permission on downloaded files, so the macOS and
+      # Linux programs are shipped in archives that keep it. Windows .exe ships as is.
+      - name: Package
+        run: |
+          mkdir -p release
+          cd cli/dist
+          cp slide-anonymizer-windows.exe ../../release/
+          zip -9 ../../release/slide-anonymizer-mac-apple-silicon.zip slide-anonymizer-mac-apple-silicon
+          zip -9 ../../release/slide-anonymizer-mac-intel.zip slide-anonymizer-mac-intel
+          tar -czf ../../release/slide-anonymizer-linux.tar.gz slide-anonymizer-linux
+          cd ../../release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slide-anonymizer-programs
+          path: release/*
+          retention-days: 14
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          body: |
+            ## Download
+
+            | Computer | File |
+            |---|---|
+            | Windows 10 / 11 | **slide-anonymizer-windows.exe** |
+            | Mac with Apple chip (M1–M4) | **slide-anonymizer-mac-apple-silicon.zip** |
+            | Mac with Intel chip | **slide-anonymizer-mac-intel.zip** |
+            | Linux (x86-64) | **slide-anonymizer-linux.tar.gz** |
+
+            No installation needed. How to use it: see the [wiki](https://github.com/${{ github.repository }}/wiki/Command-Line-Tool).
